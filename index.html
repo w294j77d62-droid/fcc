@@ -1,0 +1,203 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>FCC プロキシ - 最小限版</title>
+  <style>
+    :root {--p:#3b82f6;--b:#f8fafc;--t:#1e293b;--m:#647489;--s:#10b981;--e:#ef4444;--w:#f59e0b}
+    *{box-sizing:border-box}body{font-family:system-ui,-apple-system,sans-serif;background:var(--b);color:var(--t);margin:20px;padding:0;max-width:720px;margin:0 auto}h1{font-size:1.5rem;margin:0 0 10px}p.sub{color:var(--m);font-size:.9rem;margin:0 0 20px}.card{background:var(--card);border-radius:8px;padding:20px;margin:0 0 20px}.form{margin:0 0 15px}.form>label{display:block;margin:0 0 5px;font-weight:500;font-size:.8rem}.form>input,.form>select{width:100%;padding:8px 10px;border:1px solid #cbd5e1;border-radius:4px;font-size:.85rem;background:#fff;transition:border-color .2s}.form>input:focus,.form>select:focus{outline:none;border-color:var(--p);box-shadow:0 0 0 3px rgba(59,130,246,.1)}.btn{display:inline-block;padding:8px 16px;background:var(--p);color:white;border:none;border-radius:4px;font-size:.8rem;font-weight:500;cursor:pointer;transition:.2s}.btn:hover{background:var(--p-hover:#2563eb)}.btn:disabled{opacity:.5;cursor:not-allowed}.status{padding:8px;border-radius:4px;margin:8px 0;font-size:.8rem}.status-ok{background:#d1fae5;color:#055a34;border:1px solid #34d399}.status-err{background:#fecaca;color:#991b1b;border:1px solid #fca5a5}.status-warn{background:#fffab0;color:#854d0e;border:1px solid #facc15}.ep{background:#f1f5f9;padding:10px;margin:10px 0;border-radius:4px;font-family:monospace;font-size:.8rem;overflow-x:auto}.tab{display:flex;gap:2px;margin:0 0 15px}.tab>button{padding:8px 12px;background:transparent;border:1px solid #cbd5e1;border-radius:4px 4px 0 0;color:var(--m);font-size:.8rem;cursor:pointer}.tab>button.active{background:#fff;border-bottom:none;color:var(--t);font-weight:500}.notice{background:#fef3c7;color:#92400e;padding:8px;border-radius:4px;margin:8px 0;border:1px solid #f5d68a;font-size:.8rem}.hint{font-size:.7rem;color:var(--m);margin:4px 0 0}.step{display:inline-block;padding:2px 6px;border-radius:3px;background:var(--p);color:white;font-size:.65rem;margin-left:4px}.demo{background:#10b981}.real{background:#3b82f6}
+  </style>
+</head>
+<body>
+
+  <h1>FCC プロキシ</h1>
+  <p class="sub">ブラウザで完結する AI プロキシ</p>
+
+  <!-- 接続状態 -->
+  <div class="card" style="margin:0 0 20px">
+    <h3 style="margin:0 0 10px">☁️ 接続</h3>
+    <div id="connStatus" class="status status-warn">接続待機中...</div>
+    <div id="connPanel" style="margin:10px 0 0;display:none">
+      <select id="epSelect" class="form">
+        <option value="https://fcc-free.vercel.app">無料 FCC (Vercel)</option>
+        <option value="https://fcc-proxy.onrender.com">Render FCC</option>
+      </select>
+      <input id="apiKey" type="password" class="form" placeholder="APIキー (省略可)">
+      <button id="connectBtn" class="btn" style="margin:8px 0 0">接続確立</button>
+    </div>
+  </div>
+
+  <!-- モード選択 -->
+  <div class="tab">
+    <button class="tab-btn active" data-m="demo">デモ</button>
+    <button class="tab-btn" data-m="real">本番</button>
+  </div>
+
+  <!-- デモモード -->
+  <div id="panelDemo" class="card" style="display:none">
+    <h3>🧪 デモモード</h3>
+    <p class="hint">すぐ始められます。質問を入力して送信</p>
+    <textarea id="qDemo" class="form" rows="3" placeholder="例: Python でリストの合計を計算する方法"></textarea>
+    <button id="sendDemo" class="btn" style="margin:10px 0 0">質問を送信</button>
+    <div id="demoResult" class="ep" style="margin:10px 0 0;display:none"></div>
+  </div>
+
+  <!-- 本番モード -->
+  <div id="panelReal" class="card" style="display:none">
+    <h3>🔧 本番モード</h3>
+    <p class="hint">APIキーで接続します</p>
+    <div class="form-group" style="margin:0 0 10px"><label class="form">プロバイダー</label><select id="provider" class="form"><option value="openai">OpenAI</option><option value="anthropic">Anthropic</option><option value="google">Google AI</option></select></div>
+    <div class="form-group" style="margin:0 0 10px"><label class="form">APIキー</label><input id="apiKeyR" type="password" class="form" placeholder="sk-..."></div>
+    <div class="form-group" style="margin:0 0 10px"><label class="form">モデル</label><input id="model" class="form" placeholder="gpt-4 等"></div>
+    <button id="testConn" class="btn btn-warn" style="margin:8px 0 0">接続テスト</button>
+    <div id="connStatusR" class="status status-warn" style="margin:10px 0 0;display:none"></div>
+    <textarea id="qReal" class="form" rows="3" placeholder="AI に質問"></textarea>
+    <button id="sendReal" class="btn" style="margin:10px 0 0">送信実行</button>
+    <div id="realResult" class="ep" style="margin:10px 0 0;display:none"></div>
+  </div>
+
+  <script>
+    // ==========================================
+    // 状態変数
+    // ==========================================
+    let mode='demo'; // 'demo' 或いは 'real'
+    let connected=false;
+    let ep='https://fcc-free.vercel.app'; // デフォルト FCC エンドPOINT
+    let api='';
+
+    // localStorage から設定を読み込み
+    const ls=localStorage;
+    const m=ls.getItem('fcc_mode');
+    if(m){mode=m}else{ls.setItem('fcc_mode','demo')}
+    const ak=ls.getItem('fcc_api_key');
+    if(ak){api=ak;document.getElementById('apiKey').value=ak;document.getElementById('apiKeyR').value=ak}
+
+    // DOM 要素
+    const el={
+      connStatus:document.getElementById('connStatus'),
+      connPanel:document.getElementById('connPanel'),
+      epSelect:document.getElementById('epSelect'),
+      apiKey:document.getElementById('apiKey'),
+      connectBtn:document.getElementById('connectBtn'),
+      modeBtns:document.querySelectorAll('.tab-btn'),
+      panelDemo:document.getElementById('panelDemo'),
+      panelReal:document.getElementById('panelReal'),
+      sendDemo:document.getElementById('sendDemo'),
+      qDemo:document.getElementById('qDemo'),
+      demoResult:document.getElementById('demoResult'),
+      provider:document.getElementById('provider'),
+      apiKeyR:document.getElementById('apiKeyR'),
+      model:document.getElementById('model'),
+      testConn:document.getElementById('testConn'),
+      connStatusR:document.getElementById('connStatusR'),
+      qReal:document.getElementById('qReal'),
+      sendReal:document.getElementById('sendReal'),
+      realResult:document.getElementById('realResult')
+    }
+
+    // ==========================================
+    // モード切り替え
+    // ==========================================
+    function setMode(m){
+      mode=m;ls.setItem('fcc_mode',m);
+      el.modeBtns.forEach(b=>b.classList.toggle('active',b.dataset.m===m));
+      el.panelDemo.style.display=m==='demo'?'block':'none';
+      el.panelReal.style.display=m==='real'?'block':'none';
+      if(m==='demo'){connected=false;el.connStatus.className='status status-warn';el.connStatus.textContent='接続待機中...'}
+    }
+
+    // ==========================================
+    // 接続処理
+    // ==========================================
+    async function connect(){
+      const sel=el.epSelect.value;ep=sel;
+      const k=el.apiKey.value.trim();api=k||'';
+      if(api){ls.setItem('fcc_api_key',api)}
+      el.connStatus.className='status status-warn';el.connStatus.textContent='接続中...';
+      try{
+        const r=await fetch(ep.replace('/v1','/health'),{method:'GET',timeout:5000});
+        if(r.ok){
+          el.connStatus.className='status status-ok';el.connStatus.textContent='接続できました!';connected=true;
+          el.connPanel.style.display='none';
+        }else{el.connStatus.className='status status-err';el.connStatus.textContent='接続失敗: '+r.status}
+      }catch(e){el.connStatus.className='status status-err';el.connStatus.textContent='接続エラー: '+e.message;connected=false}
+    }
+
+    // ==========================================
+    // デモ送信
+    // ==========================================
+    async function sendDemo(){
+      const q=el.qDemo.value.trim();if(!q){alert('質問を入力');return}
+      if(!connected){alert('先に接続確立');return}
+      el.demoResult.style.display='none';el.demoResult.innerHTML='';
+      el.demoResult.innerHTML='<span style="color:#666">送信中...</span>'
+      try{
+        const r=await fetch(`${ep}/v1/chat/completions`,{
+          method:'POST',
+          headers:{'Content-Type':'application/json'},
+          body:JSON.stringify({model:'gpt-3.5-turbo',messages:[{role:'user',content:q}],temperature:0.7})
+        })
+        if(r.ok){
+          const d=await r.json();const a=d.choices?.[0].message.content||'応答なし'
+          el.demoResult.innerHTML='<strong>🤖 AI:</strong> '+a;el.demoResult.style.display='block'
+        }else{el.demoResult.innerHTML='<span style="color:#e53e3e">エラー '+r.status+'</span>';el.demoResult.style.display='block'}
+      }catch(e){el.demoResult.innerHTML='<span style="color:#e53e3e">送信エラー: '+e.message+'</span>';el.demoResult.style.display='block'}
+    }
+
+    // ==========================================
+    // 本番送信
+    // ==========================================
+    async function sendReal(){
+      const q=el.qReal.value.trim();if(!q){alert('質問を入力');return}
+      if(!connected){alert('先に接続テスト実行');return}
+      el.realResult.style.display='none';el.realResult.innerHTML=''
+      el.realResult.innerHTML='<span style="color:#666">送信中...</span>'
+      const k=el.apiKeyR.value.trim();if(!k){alert('APIキーを入力');return}
+      try{
+        const r=await fetch(`${ep}/v1/chat/completions`,{
+          method:'POST',
+          headers:{'Content-Type':'application/json','Authorization':'Bearer '+k},
+          body:JSON.stringify({model:el.model.value||'gpt-4',messages:[{role:'user',content:q}],temperature:0.7})
+        })
+        if(r.ok){
+          const d=await r.json();const a=d.choices?.[0].message.content||'応答なし'
+          el.realResult.innerHTML='<strong>🤖 AI:</strong> '+a;el.realResult.style.display='block'
+        }else{
+          const e=await r.json();el.realResult.innerHTML='<span style="color:#e53e3e">'+(e.error?.message||'不明なエラー')+'</span>';el.realResult.style.display='block'
+        }
+      }catch(e){el.realResult.innerHTML='<span style="color:#e53e3e">送信エラー: '+e.message+'</span>';el.realResult.style.display='block'}
+    }
+
+    // ==========================================
+    // 接続テスト (本番)
+    // ==========================================
+    async function testReal(){
+      const k=el.apiKeyR.value.trim();if(!k){alert('APIキーを入力');return}
+      el.connStatusR.className='status status-warn';el.connStatusR.textContent='テスト中...'
+      try{
+        const r=await fetch(`${ep}/v1/models`,{method:'GET',headers:{'Authorization':'Bearer '+k,'Content-Type':'application/json'}})
+        if(r.ok){
+          const d=await r.json();const m=d.data.map(x=>x.id).join(',').substring(0,30)+'...';el.connStatusR.className='status status-ok';el.connStatusR.textContent='接続OK ( '+m+' )';connected=true;el.sendReal.disabled=false
+        }else{const e=await r.json();el.connStatusR.className='status status-err';el.connStatusR.textContent='接続エラー: '+ (e.error?.message||'不明')}
+      }catch(e){el.connStatusR.className='status status-err';el.connStatusR.textContent='接続エラー: '+e.message}
+    }
+
+    // ==========================================
+    // イベントバインド
+    // ==========================================
+    el.connectBtn.addEventListener('click',connect);
+    el.sendDemo.addEventListener('click',sendDemo);
+    el.sendReal.addEventListener('click',sendReal);
+    el.testConn.addEventListener('click',testReal);
+
+    // モードタブ
+    el.modeBtns.forEach(b=>b.addEventListener('click',()=>setMode(b.dataset.m)))
+
+    // 初期化
+    setMode(mode);
+    if(mode==='real'){el.testConn.click()}
+  </script>
+
+</body>
+</html>
